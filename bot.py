@@ -192,7 +192,7 @@ async def on_ready():
 async def on_member_join(member):
     await spit_log(f'Say welcome to {member.name}!',
                    title="👋 New member joined!", status=Status.info)
-    await onboard(member)
+    await init_onboard(member)
 
 
 @bot.event
