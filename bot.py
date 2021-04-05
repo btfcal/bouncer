@@ -11,7 +11,6 @@ from datetime import datetime
 import utils as utils
 import re
 import asyncio
-from replit import db
 import random
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
@@ -67,6 +66,10 @@ async def pause(channel, seconds):
     async with channel.typing():
         await asyncio.sleep(seconds)
 
+
+def valid_email(str):
+    regex = "(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])"
+    return re.search(regex, str)
 
 async def init_onboard(member):
     # initialize onboarding procedure
@@ -189,10 +192,6 @@ async def init_onboard(member):
 
     email = await email_check_bump()
 
-    def valid_email(str):
-        regex = "(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])"
-        return re.search(regex, str)
-
     def valid_domain(str):
         return str.endswith(VALID_DOMAIN)
 
@@ -258,14 +257,29 @@ async def init_onboard(member):
                    status=Status.success)
 
     await onboard_channel.send(
-        '🎉 Verification complete! You are now good to go. Be sure to reach out to staff if you have any questions!'
+        '🎉 Verification complete! Be sure to reach out to staff if you have any questions!'
     )
+    complete_message = await onboard_channel.send('React 👍 to this message to clean up this channel and unlock the rest of the community.')
+    await complete_message.add_reaction('👍')
+
+    def check_cleanup(reaction, user):
+        return user == member and str(reaction.emoji) == '👍'
+
+    await bot.wait_for('reaction_add', check=check_cleanup)
+
+    await onboard_role.delete()
+    await onboard_channel.delete()
+
+    await spit_log(f'{member.mention} onboarding role and channel deleted.',
+                   title=f"🧼 {member.name} Onboarding Cleaned Up!",
+                   status=Status.success)
 
     member_role = discord.utils.get(guild.roles, id=MEMBER_ROLE_ID)
     await member.add_roles(member_role)
 
 
 def send_code(email, code):
+    print('Sending email to', email, 'with code', code)
     message = Mail(from_email='btf@orph.app', to_emails=[email])
 
     data = {'code': str(code)}
@@ -371,5 +385,13 @@ async def reset_server(ctx):
     else:
         await spit_log(f'No channels were removed!', status=Status.info)
 
+@bot.command()
+@commands.has_role('staff')
+async def email_code(ctx, email, code):
+  if not valid_email(email):
+    await ctx.send('{} is not a valid email address.'.format(email))
+
+  send_code(email, code)
+  await ctx.send('Successfully sent code {} to {}.'.format(code, email))
 
 bot.run(DISCORD_TOKEN)
