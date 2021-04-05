@@ -276,6 +276,7 @@ async def init_onboard(member):
 
     member_role = discord.utils.get(guild.roles, id=MEMBER_ROLE_ID)
     await member.add_roles(member_role)
+    await member.remove_roles(pending_role)
 
 
 def send_code(email, code):
